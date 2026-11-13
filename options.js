@@ -22,6 +22,13 @@ function validateContentTypes(types) {
   for (const t of types) {
     if (!t.name || !t.entitySet) throw new Error("Each content type needs name and entitySet.");
     if (t.sites !== undefined && !Array.isArray(t.sites)) throw new Error(`"sites" for ${t.name} must be an array.`);
+    if (t.pathPattern !== undefined) {
+      try {
+        new RegExp(t.pathPattern, "i");
+      } catch {
+        throw new Error(`"pathPattern" for ${t.name} is not a valid regular expression.`);
+      }
+    }
   }
 }
 

@@ -27,6 +27,7 @@ After changing any file, click the extension's **Reload** button on the extensio
 | View in Sitefinity authoring | From a Production page: popup button, right-click menu, or `Alt+Shift+A`. Only available when you're logged in to the Sitefinity backend. |
 | Edit in Sitefinity | From a Production page: popup button, right-click menu, or `Alt+Shift+E`. Opens the page editor, e.g. `www.scottsdalelibrary.org/borrow/digital-collection` → `/Sitefinity/adminapp/pages/borrow/digital-collection/Action/Edit/en?sf_site=<library site id>`. Site homepages map to `home`. Only available when you're logged in. |
 | Edit a news article | On a Production detail page (`…/details/<slug>`), **Edit in Sitefinity** looks up the item's ID and provider by `UrlName` through the public `/api/default/newsitems` API and opens `/Sitefinity/adminapp/content/newsitems/<id>/edit?sf_provider=<provider>&sf_culture=en` (e.g. `OpenAccessDataProvider` for ScottsdaleAZ, `scottsdalepubliclibrarynews` for the Library). If no item matches, it opens the editor for the hosting page (e.g. `/scottsdale-news`). Enabled for ScottsdaleAZ and the Library. |
+| Edit a public notice | Same as news, for ScottsdaleAZ pages at `/public-notices/<slug>`: opens `/Sitefinity/adminapp/content/publicnotices/<id>/edit?sf_provider=OpenAccessProvider&sf_culture=en`. |
 
 ## Site mapping
 

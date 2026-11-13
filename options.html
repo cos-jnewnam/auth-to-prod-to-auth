@@ -24,8 +24,9 @@
 
   <h2>Content types</h2>
   <p>
-    Production pages ending in <code>/details/&lt;slug&gt;</code> are looked up through the site's public
-    <code>/api/default/&lt;entitySet&gt;</code> service by <code>UrlName</code>. If a match is found, <strong>Edit</strong> opens
+    Production pages matching a type's <code>pathPattern</code> (a case-insensitive regex; group 1 = hosting page path,
+    group 2 = the item's <code>UrlName</code>; default <code>…/details/&lt;slug&gt;</code>) are looked up through the site's public
+    <code>/api/default/&lt;entitySet&gt;</code> service. If a match is found, <strong>Edit</strong> opens
     <code>/Sitefinity/adminapp/content/&lt;adminType&gt;/&lt;id&gt;/edit?sf_provider=&lt;provider&gt;</code>; otherwise it edits the hosting page.
     The provider comes from the item itself; the <code>provider</code> setting is only a fallback.
     <code>sites</code> lists the site <code>id</code>s each type applies to (empty = all).

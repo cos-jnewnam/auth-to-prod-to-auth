@@ -32,7 +32,9 @@
         titleSuffixes: ["Choose Scottsdale"]
       }
     ],
-    // Content items shown on Production at .../details/<UrlName>. Looked up via the public /api/default/<entitySet> service.
+    // Content items on Production, looked up by UrlName via the public /api/default/<entitySet> service.
+    // `pathPattern` is a case-insensitive regex matched against the Production path: group 1 = hosting page path
+    //   (edited when no item is found), group 2 = the item's UrlName. Defaults to ".../details/<UrlName>".
     // The item's Provider from the API is used for the editor link; `provider` is only a fallback.
     // `sites` limits which site ids the type applies to (empty = all).
     contentTypes: [
@@ -41,13 +43,22 @@
         entitySet: "newsitems",
         adminType: "newsitems",
         provider: "OpenAccessDataProvider",
+        pathPattern: "^(.*?)/details/([^/]+)/?$",
         sites: ["main", "library"]
+      },
+      {
+        name: "Public Notice",
+        entitySet: "publicnotices",
+        adminType: "publicnotices",
+        provider: "OpenAccessProvider",
+        pathPattern: "^(/public-notices)/([^/]+)/?$",
+        sites: ["main"]
       }
     ]
   };
 
   const PREVIEW_RE = /\/Action\/Preview\/?$/i;
-  const DETAIL_RE = /^(.*?)\/details\/([^/]+)\/?$/i;
+  const DEFAULT_PATH_PATTERN = "^(.*?)/details/([^/]+)/?$";
   const EDIT_CULTURE = "en";
   const HOME_PAGE_NAME = "home";
 
@@ -84,23 +95,20 @@
     }
   }
 
-  // Finds the id (and provider) of a content item (e.g. a news article) by its UrlName using the site's public API.
-  async function findContentItem(origin, slug, site, cfg) {
-    const types = (cfg.contentTypes || []).filter((t) => !t.sites?.length || t.sites.includes(site.id));
+  // Finds the id (and provider) of a content item by its UrlName using the site's public API.
+  async function findContentItem(origin, slug, type) {
     const filter = `UrlName eq '${safeDecode(slug).replace(/'/g, "''")}'`;
-    for (const type of types) {
-      // Prefer the item's own Provider (it differs per site); fall back to Id-only if a type doesn't expose it.
-      for (const select of ["Id,Provider", "Id"]) {
-        const api = `${origin}/api/default/${type.entitySet}?$filter=${encodeURIComponent(filter)}&$select=${select}&$top=1`;
-        try {
-          const res = await fetch(api, { cache: "no-store" });
-          if (!res.ok) continue;
-          const item = (await res.json())?.value?.[0];
-          if (item?.Id) return { type, id: item.Id, provider: item.Provider || type.provider };
-          break;
-        } catch {
-          // Try the next query/content type.
-        }
+    // Prefer the item's own Provider (it differs per site); fall back to Id-only if a type doesn't expose it.
+    for (const select of ["Id,Provider", "Id"]) {
+      const api = `${origin}/api/default/${type.entitySet}?$filter=${encodeURIComponent(filter)}&$select=${select}&$top=1`;
+      try {
+        const res = await fetch(api, { cache: "no-store" });
+        if (!res.ok) continue;
+        const item = (await res.json())?.value?.[0];
+        if (item?.Id) return { type, id: item.Id, provider: item.Provider || type.provider };
+        return null;
+      } catch {
+        // Try the next query.
       }
     }
     return null;
@@ -111,13 +119,26 @@
     return `${cfg.authoringOrigin}/Sitefinity/adminapp/content/${item.type.adminType || item.type.entitySet}/${item.id}/edit?${query}`;
   }
 
-  // Detail pages (.../details/<slug>) edit the content item; otherwise (or if not found) edit the hosting page.
+  function matchPath(type, pathname) {
+    try {
+      return pathname.match(new RegExp(type.pathPattern || DEFAULT_PATH_PATTERN, "i"));
+    } catch {
+      return null;
+    }
+  }
+
+  // Content item pages edit the item; other pages (or items not found) edit the (hosting) page.
   async function resolveEdit(url, site, cfg) {
-    const detail = url.pathname.match(DETAIL_RE);
-    if (!detail) return { editUrl: editUrlFor(url.pathname, site, cfg), editType: null };
-    const item = await findContentItem(url.origin, detail[2], site, cfg);
-    if (item) return { editUrl: contentEditUrlFor(item, cfg), editType: item.type.name };
-    return { editUrl: editUrlFor(detail[1] || "/", site, cfg), editType: null };
+    const types = (cfg.contentTypes || []).filter((t) => !t.sites?.length || t.sites.includes(site.id));
+    let hostingPath = null;
+    for (const type of types) {
+      const match = matchPath(type, url.pathname);
+      if (!match || !match[2]) continue;
+      const item = await findContentItem(url.origin, match[2], type);
+      if (item) return { editUrl: contentEditUrlFor(item, cfg), editType: item.type.name };
+      hostingPath ??= match[1] || "/";
+    }
+    return { editUrl: editUrlFor(hostingPath ?? url.pathname, site, cfg), editType: null };
   }
 
   function defaultSite(cfg) {
