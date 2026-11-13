@@ -4,7 +4,8 @@ const LOGIN_CACHE_MS = 60 * 1000;
 const MENU = {
   production: "sfx-open-production",
   authoringFromPreview: "sfx-open-authoring-from-preview",
-  authoringFromProduction: "sfx-open-authoring-from-production"
+  authoringFromProduction: "sfx-open-authoring-from-production",
+  editFromProduction: "sfx-edit-from-production"
 };
 
 // Logged-in admins can open the backend dashboard; anonymous users are redirected to /Sitefinity/Login.
@@ -65,6 +66,13 @@ async function openAuthoring(tab) {
   }
 }
 
+async function openEdit(tab) {
+  const info = await resolveTab(tab);
+  if (info.kind === "production" && info.editUrl && (await checkLogin())) {
+    await openBeside(tab, info.editUrl);
+  }
+}
+
 async function buildMenus() {
   const cfg = await SFX.getConfig();
   const origin = new URL(cfg.authoringOrigin).origin;
@@ -91,16 +99,25 @@ async function buildMenus() {
       documentUrlPatterns: prodPatterns,
       visible: false
     });
+    chrome.contextMenus.create({
+      id: MENU.editFromProduction,
+      title: "Edit in Sitefinity",
+      contexts: ["page", "frame", "link", "selection", "image"],
+      documentUrlPatterns: prodPatterns,
+      visible: false
+    });
   }
 }
 
-// Only show the "authoring" menu on production pages when an admin session exists.
+// Only show the production-page menus when an admin session exists.
 async function refreshProductionMenu(tab) {
   if (!tab?.url) return;
   const cfg = await SFX.getConfig();
   if (SFX.classify(tab.url, cfg).kind !== "production") return;
   const loggedIn = await checkLogin();
-  chrome.contextMenus.update(MENU.authoringFromProduction, { visible: loggedIn }, () => void chrome.runtime.lastError);
+  for (const id of [MENU.authoringFromProduction, MENU.editFromProduction]) {
+    chrome.contextMenus.update(id, { visible: loggedIn }, () => void chrome.runtime.lastError);
+  }
 }
 
 chrome.runtime.onInstalled.addListener(buildMenus);
@@ -121,7 +138,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === MENU.production) openProduction(target);
   else if (info.menuItemId === MENU.authoringFromPreview || info.menuItemId === MENU.authoringFromProduction) {
     openAuthoring(target);
-  }
+  } else if (info.menuItemId === MENU.editFromProduction) openEdit(target);
 });
 
 chrome.commands.onCommand.addListener(async (command, tab) => {
@@ -129,6 +146,7 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
   if (!tab?.url) return;
   if (command === "open-production") openProduction(tab);
   else if (command === "open-authoring") openAuthoring(tab);
+  else if (command === "open-edit") openEdit(tab);
 });
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {

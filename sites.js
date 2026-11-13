@@ -8,6 +8,7 @@
         id: "main",
         name: "City of Scottsdale",
         prefix: "",
+        siteId: "63cd8978-b8d2-41f9-aa54-53eceaf84bb2",
         productionOrigin: "https://www.scottsdaleaz.gov",
         productionHosts: ["www.scottsdaleaz.gov", "scottsdaleaz.gov"],
         titleSuffixes: []
@@ -16,6 +17,7 @@
         id: "library",
         name: "Scottsdale Public Library",
         prefix: "/library",
+        siteId: "d47dfb13-ad6e-433f-aba9-a35b1e0c6316",
         productionOrigin: "https://www.scottsdalelibrary.org",
         productionHosts: ["www.scottsdalelibrary.org", "scottsdalelibrary.org"],
         titleSuffixes: ["Scottsdale Public Library"]
@@ -24,6 +26,7 @@
         id: "choosescottsdale",
         name: "Choose Scottsdale",
         prefix: "/choosescottsdale",
+        siteId: "4fede6ef-5ff7-4f6f-80a3-6ee83c0892b9",
         productionOrigin: "https://www.choosescottsdale.com",
         productionHosts: ["www.choosescottsdale.com", "choosescottsdale.com"],
         titleSuffixes: ["Choose Scottsdale"]
@@ -32,14 +35,31 @@
   };
 
   const PREVIEW_RE = /\/Action\/Preview\/?$/i;
+  const EDIT_CULTURE = "en";
+  const HOME_PAGE_NAME = "home";
 
   async function getConfig() {
     const stored = await chrome.storage.sync.get(["sites", "autoRedirect", "authoringOrigin"]);
+    const storedSites = Array.isArray(stored.sites) && stored.sites.length ? stored.sites : null;
     return {
       authoringOrigin: stored.authoringOrigin || DEFAULT_CONFIG.authoringOrigin,
       autoRedirect: stored.autoRedirect ?? DEFAULT_CONFIG.autoRedirect,
-      sites: Array.isArray(stored.sites) && stored.sites.length ? stored.sites : DEFAULT_CONFIG.sites
+      sites: storedSites ? storedSites.map(withDefaultSiteId) : DEFAULT_CONFIG.sites
     };
+  }
+
+  // Settings saved before siteId existed won't have it; fill it in from the defaults.
+  function withDefaultSiteId(site) {
+    if (site.siteId) return site;
+    const def = DEFAULT_CONFIG.sites.find((d) => d.id === site.id);
+    return def?.siteId ? { ...site, siteId: def.siteId } : site;
+  }
+
+  // e.g. /neighborhood-programs/block-party -> /Sitefinity/adminapp/pages/neighborhood-programs/block-party/Action/Edit/en?sf_site=...
+  function editUrlFor(pathname, site, cfg) {
+    const pagePath = pathname.replace(/^\/+|\/+$/g, "") || HOME_PAGE_NAME;
+    const query = site.siteId ? `?sf_site=${encodeURIComponent(site.siteId)}` : "";
+    return `${cfg.authoringOrigin}/Sitefinity/adminapp/pages/${pagePath}/Action/Edit/${EDIT_CULTURE}${query}`;
   }
 
   function defaultSite(cfg) {
@@ -142,7 +162,7 @@
   }
 
   /**
-   * Returns { kind, site, authoringUrl, productionUrl } for the given page.
+   * Returns { kind, site, authoringUrl, productionUrl, editUrl? } for the given page (editUrl only for production pages).
    * `title` is only needed for preview URLs.
    */
   async function resolve(href, title, cfg) {
@@ -171,6 +191,7 @@
         kind: c.kind,
         site: c.site,
         authoringUrl: cfg.authoringOrigin + joinPath(c.site.prefix, c.url.pathname) + c.url.search + c.url.hash,
+        editUrl: editUrlFor(c.url.pathname, c.site, cfg),
         productionUrl: c.url.href
       };
     }

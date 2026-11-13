@@ -25,13 +25,14 @@ After changing any file, click the extension's **Reload** button on the extensio
 | Remove `/Action/Preview` | Automatic when a Preview page opens (toggle in the popup/settings). The site is detected from the page title, e.g. `Book Recommendations \| Scottsdale Public Library` → `/library/book-recommendations`. If the title doesn't match, it checks which authoring URL exists. |
 | View in Production (new tab) | Popup button, right-click menu, or `Alt+Shift+P`. Works from Preview or authoring pages. |
 | View in Sitefinity authoring | From a Production page: popup button, right-click menu, or `Alt+Shift+A`. Only available when you're logged in to the Sitefinity backend. |
+| Edit in Sitefinity | From a Production page: popup button, right-click menu, or `Alt+Shift+E`. Opens the page editor, e.g. `www.scottsdalelibrary.org/borrow/digital-collection` → `/Sitefinity/adminapp/pages/borrow/digital-collection/Action/Edit/en?sf_site=<library site id>`. Site homepages map to `home`. Only available when you're logged in. |
 
 ## Site mapping
 
-| Site | Authoring path | Production |
-| --- | --- | --- |
-| City of Scottsdale | `/` | `https://www.scottsdaleaz.gov` |
-| Scottsdale Public Library | `/library` | `https://www.scottsdalelibrary.org` |
-| Choose Scottsdale | `/choosescottsdale` | `https://www.choosescottsdale.com` |
+| Site | Authoring path | Production | Site ID |
+| --- | --- | --- | --- |
+| City of Scottsdale | `/` | `https://www.scottsdaleaz.gov` | `63cd8978-b8d2-41f9-aa54-53eceaf84bb2` |
+| Scottsdale Public Library | `/library` | `https://www.scottsdalelibrary.org` | `d47dfb13-ad6e-433f-aba9-a35b1e0c6316` |
+| Choose Scottsdale | `/choosescottsdale` | `https://www.choosescottsdale.com` | `4fede6ef-5ff7-4f6f-80a3-6ee83c0892b9` |
 
-Edit the mapping (including title suffixes) on the extension's **Settings** page. Change shortcuts at `chrome://extensions/shortcuts` (Chrome) or `edge://extensions/shortcuts` (Edge), or use the link in the popup.
+Edit the mapping (including title suffixes and site IDs) on the extension's **Settings** page. Change shortcuts at `chrome://extensions/shortcuts` (Chrome) or `edge://extensions/shortcuts` (Edge), or use the link in the popup.
