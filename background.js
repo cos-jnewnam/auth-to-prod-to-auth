@@ -79,28 +79,44 @@ async function openEdit(tab) {
   }
 }
 
-async function buildMenus() {
+const MENU_CONTEXTS = ["page", "frame", "link", "selection", "image"];
+
+function createMenu(props) {
+  return new Promise((resolve) => {
+    chrome.contextMenus.create({ contexts: MENU_CONTEXTS, ...props }, () => {
+      // Ignore errors (e.g. duplicate ids) so they don't surface as "Unchecked runtime.lastError".
+      void chrome.runtime.lastError;
+      resolve();
+    });
+  });
+}
+
+// Rebuilds are queued so overlapping calls (install/startup/settings change) can't create duplicate ids.
+let menuBuild = Promise.resolve();
+function buildMenus() {
+  menuBuild = menuBuild.then(rebuildMenus, rebuildMenus);
+  return menuBuild;
+}
+
+async function rebuildMenus() {
   const cfg = await SFX.getConfig();
   const origin = new URL(cfg.authoringOrigin).origin;
   const prodPatterns = cfg.sites.flatMap((s) => (s.productionHosts || []).map((h) => `*://${h}/*`));
 
   await chrome.contextMenus.removeAll();
-  chrome.contextMenus.create({
+  await createMenu({
     id: MENU.production,
     title: "View in Production",
-    contexts: ["page", "frame", "link", "selection", "image"],
     documentUrlPatterns: [`${origin}/*`]
   });
-  chrome.contextMenus.create({
+  await createMenu({
     id: MENU.authoringFromPreview,
     title: "Open authoring page (remove /Action/Preview)",
-    contexts: ["page", "frame", "link", "selection", "image"],
     documentUrlPatterns: [`${origin}/*/Action/Preview*`, `${origin}/*/action/preview*`]
   });
-  chrome.contextMenus.create({
+  await createMenu({
     id: MENU.authoringFromBackend,
     title: "View on authoring site",
-    contexts: ["page", "frame", "link", "selection", "image"],
     documentUrlPatterns: [
       `${origin}/Sitefinity/adminapp/content/*`,
       `${origin}/Sitefinity/adminapp/pages/*`,
@@ -110,17 +126,15 @@ async function buildMenus() {
     ]
   });
   if (prodPatterns.length) {
-    chrome.contextMenus.create({
+    await createMenu({
       id: MENU.authoringFromProduction,
       title: "View in Sitefinity authoring",
-      contexts: ["page", "frame", "link", "selection", "image"],
       documentUrlPatterns: prodPatterns,
       visible: false
     });
-    chrome.contextMenus.create({
+    await createMenu({
       id: MENU.editFromProduction,
       title: "Edit in Sitefinity",
-      contexts: ["page", "frame", "link", "selection", "image"],
       documentUrlPatterns: prodPatterns,
       visible: false
     });

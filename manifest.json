@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Sitefinity Preview Helper",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Fixes Sitefinity /Action/Preview URLs (multisite aware) and jumps between authoring, Production, and the page editor.",
   "permissions": ["storage", "contextMenus", "scripting", "activeTab", "tabs"],
   "host_permissions": [
