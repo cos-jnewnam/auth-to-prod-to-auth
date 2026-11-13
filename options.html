@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Sitefinity Preview Helper – Settings</title>
+  <link rel="stylesheet" href="ui.css">
+</head>
+<body class="options">
+  <h1>Sitefinity Preview Helper – Settings</h1>
+
+  <label class="toggle">
+    <input type="checkbox" id="autoRedirect">
+    Automatically remove <code>/Action/Preview</code> when a Preview page opens
+  </label>
+
+  <h2>Sites</h2>
+  <p>
+    <code>prefix</code> is the path used on the authoring server (empty for the main site).
+    <code>titleSuffixes</code> are matched against the end of the Preview page's <code>&lt;title&gt;</code>
+    (e.g. "Book Recommendations | Scottsdale Public Library"). If no suffix matches, the extension checks which authoring URL exists.
+  </p>
+  <textarea id="sites" spellcheck="false"></textarea>
+  <p>
+    <button class="primary" id="save">Save</button>
+    <button id="reset">Reset to defaults</button>
+    <span id="msg" class="msg"></span>
+  </p>
+
+  <script src="sites.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
