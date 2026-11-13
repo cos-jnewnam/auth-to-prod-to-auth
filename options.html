@@ -29,6 +29,8 @@
     <code>/api/default/&lt;entitySet&gt;</code> service. If a match is found, <strong>Edit</strong> opens
     <code>/Sitefinity/adminapp/content/&lt;adminType&gt;/&lt;id&gt;/edit?sf_provider=&lt;provider&gt;</code>; otherwise it edits the hosting page.
     The provider comes from the item itself; the <code>provider</code> setting is only a fallback.
+    <code>detailPaths</code> maps site <code>id</code>s to the page an item is shown at (e.g. <code>"/news/details/{UrlName}"</code>);
+    it's used to go from the backend content editor to the live item.
     <code>sites</code> lists the site <code>id</code>s each type applies to (empty = all).
   </p>
   <textarea id="contentTypes" class="short" spellcheck="false"></textarea>

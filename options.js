@@ -22,6 +22,12 @@ function validateContentTypes(types) {
   for (const t of types) {
     if (!t.name || !t.entitySet) throw new Error("Each content type needs name and entitySet.");
     if (t.sites !== undefined && !Array.isArray(t.sites)) throw new Error(`"sites" for ${t.name} must be an array.`);
+    if (t.detailPaths !== undefined) {
+      const ok =
+        t.detailPaths && typeof t.detailPaths === "object" && !Array.isArray(t.detailPaths) &&
+        Object.values(t.detailPaths).every((p) => typeof p === "string" && p.startsWith("/") && p.includes("{UrlName}"));
+      if (!ok) throw new Error(`"detailPaths" for ${t.name} must map site ids to paths like "/news/details/{UrlName}".`);
+    }
     if (t.pathPattern !== undefined) {
       try {
         new RegExp(t.pathPattern, "i");

@@ -1,12 +1,21 @@
 const KIND_LABELS = {
   preview: "Preview page",
+  contentPreview: "Content preview",
   authoring: "Authoring page",
   production: "Production page",
+  backendContent: "Sitefinity content editor",
+  backendPage: "Sitefinity page editor",
   backend: "Sitefinity backend",
   other: "Not a Scottsdale Sitefinity page"
 };
 
+const BACKEND_KINDS = ["contentPreview", "backendContent", "backendPage"];
+
 const $ = (id) => document.getElementById(id);
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
+}
 
 function button(label, href, onClick) {
   const wrap = document.createElement("div");
@@ -56,8 +65,24 @@ async function init() {
   if (info.kind === "preview") {
     button("Open authoring page", info.authoringUrl, () => chrome.tabs.update(tab.id, { url: info.authoringUrl }));
   }
-  if (info.kind === "preview" || info.kind === "authoring") {
+  if (BACKEND_KINDS.includes(info.kind) && info.authoringUrl) {
+    const label = info.kind === "contentPreview" ? "Open authoring page" : "View on authoring site";
+    button(label, info.authoringUrl, () => openBeside(tab, info.authoringUrl));
+  }
+  if (info.productionUrl && (info.kind === "preview" || info.kind === "authoring" || BACKEND_KINDS.includes(info.kind))) {
     button("View in Production", info.productionUrl, () => openBeside(tab, info.productionUrl));
+  }
+  if (info.kind === "backendContent" && info.problem) {
+    const type = escapeHtml(info.editType || "content");
+    const site = escapeHtml(info.site?.name || "this site");
+    if (info.problem === "notFound") {
+      note(`This ${type} item wasn't found on the live site. It may not be published yet; use Sitefinity's <strong>Preview</strong> button to see the draft.`);
+    } else if (info.problem === "noDetailPath") {
+      note(`No detail page is configured for ${type} on ${site}. Add one under <code>detailPaths</code> in <a href="#" id="problemSettings">Settings</a>.`);
+    } else {
+      note(`This content type isn't set up yet. Add it under Content types in <a href="#" id="problemSettings">Settings</a>.`);
+    }
+    $("problemSettings")?.addEventListener("click", () => chrome.runtime.openOptionsPage());
   }
   if (info.kind === "production") {
     const loggedIn = await chrome.runtime.sendMessage({ type: "checkLogin", force: true });

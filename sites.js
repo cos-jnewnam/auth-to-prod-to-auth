@@ -36,6 +36,8 @@
     // `pathPattern` is a case-insensitive regex matched against the Production path: group 1 = hosting page path
     //   (edited when no item is found), group 2 = the item's UrlName. Defaults to ".../details/<UrlName>".
     // The item's Provider from the API is used for the editor link; `provider` is only a fallback.
+    // `detailPaths` maps site id -> the path an item is shown at ({UrlName} is replaced); used to go from the
+    //   backend content editor to the live item.
     // `sites` limits which site ids the type applies to (empty = all).
     contentTypes: [
       {
@@ -44,6 +46,10 @@
         adminType: "newsitems",
         provider: "OpenAccessDataProvider",
         pathPattern: "^(.*?)/details/([^/]+)/?$",
+        detailPaths: {
+          main: "/scottsdale-news/details/{UrlName}",
+          library: "/news/details/{UrlName}"
+        },
         sites: ["main", "library"]
       },
       {
@@ -52,12 +58,17 @@
         adminType: "publicnotices",
         provider: "OpenAccessProvider",
         pathPattern: "^(/public-notices)/([^/]+)/?$",
+        detailPaths: {
+          main: "/public-notices/{UrlName}"
+        },
         sites: ["main"]
       }
     ]
   };
 
   const PREVIEW_RE = /\/Action\/Preview\/?$/i;
+  const CONTENT_EDIT_RE = /^\/Sitefinity\/adminapp\/content\/([^/]+)\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/|$)/i;
+  const PAGE_EDIT_RE = /^\/Sitefinity\/adminapp\/pages\/(.+?)\/Action\/Edit(\/[^/]*)?\/?$/i;
   const DEFAULT_PATH_PATTERN = "^(.*?)/details/([^/]+)/?$";
   const EDIT_CULTURE = "en";
   const HOME_PAGE_NAME = "home";
@@ -69,8 +80,15 @@
       authoringOrigin: stored.authoringOrigin || DEFAULT_CONFIG.authoringOrigin,
       autoRedirect: stored.autoRedirect ?? DEFAULT_CONFIG.autoRedirect,
       sites: storedSites ? storedSites.map(withDefaultSiteId) : DEFAULT_CONFIG.sites,
-      contentTypes: Array.isArray(stored.contentTypes) ? stored.contentTypes : DEFAULT_CONFIG.contentTypes
+      contentTypes: Array.isArray(stored.contentTypes) ? stored.contentTypes.map(withDefaultDetailPaths) : DEFAULT_CONFIG.contentTypes
     };
+  }
+
+  // Content types saved before detailPaths existed won't have it; fill it in from the defaults.
+  function withDefaultDetailPaths(type) {
+    if (type.detailPaths) return type;
+    const def = DEFAULT_CONFIG.contentTypes.find((d) => d.entitySet === type.entitySet);
+    return def?.detailPaths ? { ...type, detailPaths: def.detailPaths } : type;
   }
 
   // Settings saved before siteId existed won't have it; fill it in from the defaults.
@@ -163,6 +181,16 @@
     return isAuthoring(url, cfg) && PREVIEW_RE.test(url.pathname);
   }
 
+  // Content item previews opened from the backend, e.g. /scottsdale-news/details/<slug>?sf-content-action=preview&sf-auth=...
+  function isContentPreview(url) {
+    return (url.searchParams.get("sf-content-action") || "").toLowerCase() === "preview" || url.searchParams.has("sf-auth");
+  }
+
+  function siteById(cfg, siteId) {
+    if (!siteId) return null;
+    return cfg.sites.find((s) => (s.siteId || "").toLowerCase() === siteId.toLowerCase()) || null;
+  }
+
   function productionSiteFor(url, cfg) {
     const host = url.hostname.toLowerCase();
     return cfg.sites.find((s) => (s.productionHosts || []).some((h) => h.toLowerCase() === host)) || null;
@@ -177,7 +205,12 @@
     }
     if (isPreview(url, cfg)) return { kind: "preview", url };
     if (isAuthoring(url, cfg)) {
+      const content = url.pathname.match(CONTENT_EDIT_RE);
+      if (content) return { kind: "backendContent", url, adminType: content[1], id: content[2] };
+      const page = url.pathname.match(PAGE_EDIT_RE);
+      if (page) return { kind: "backendPage", url, pagePath: "/" + page[1] };
       if (/^\/sitefinity(\/|$)/i.test(url.pathname)) return { kind: "backend", url };
+      if (isContentPreview(url)) return { kind: "contentPreview", url };
       return { kind: "authoring", url };
     }
     const site = productionSiteFor(url, cfg);
@@ -240,14 +273,81 @@
     return url.pathname.slice(site.prefix.length) || "/";
   }
 
+  function liveUrls(site, path, cfg) {
+    return {
+      authoringUrl: cfg.authoringOrigin + joinPath(site.prefix, path),
+      productionUrl: site.productionOrigin + path
+    };
+  }
+
+  // Query strings (including the sf-auth token) are dropped so the live page is shown.
+  async function resolveContentPreview(c, title, cfg) {
+    const prefixed = prefixedSites(cfg).find((s) => hasPrefix(c.url.pathname, s.prefix));
+    if (prefixed) return { site: prefixed, ...liveUrls(prefixed, pathWithoutPrefix(c.url, prefixed), cfg) };
+    const site = await resolvePreviewSite(c.url.origin + c.url.pathname, title, cfg);
+    return { site, ...liveUrls(site, c.url.pathname, cfg) };
+  }
+
+  async function fetchUrlName(origin, entitySet, id) {
+    try {
+      const res = await fetch(`${origin}/api/default/${entitySet}(${id})?$select=UrlName`, { cache: "no-store" });
+      if (!res.ok) return null;
+      return (await res.json())?.UrlName || null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Looks up a backend content item's UrlName on the live site(s) and builds its detail page URLs.
+  // Sets `problem` ("unknownType" | "notFound" | "noDetailPath") when no live URL can be built.
+  async function resolveBackendContent(c, cfg) {
+    const type = (cfg.contentTypes || []).find(
+      (t) => (t.adminType || t.entitySet).toLowerCase() === c.adminType.toLowerCase()
+    );
+    const sfSite = siteById(cfg, c.url.searchParams.get("sf_site"));
+    const base = { site: sfSite, editType: type?.name ?? null };
+    if (!type) return { ...base, problem: "unknownType" };
+
+    const typeSites = cfg.sites.filter((s) => !type.sites?.length || type.sites.includes(s.id));
+    const candidates = [...new Set([sfSite, ...typeSites].filter(Boolean))];
+    for (const site of candidates) {
+      const urlName = await fetchUrlName(site.productionOrigin, type.entitySet, c.id);
+      if (!urlName) continue;
+      const template = type.detailPaths?.[site.id];
+      if (!template) return { ...base, site, problem: "noDetailPath" };
+      return { ...base, site, ...liveUrls(site, template.replace(/\{UrlName\}/g, urlName), cfg) };
+    }
+    return { ...base, problem: "notFound" };
+  }
+
+  // Page editor -> live page. Uses sf_site when present, otherwise checks which site's authoring URL exists.
+  async function resolveBackendPage(c, cfg) {
+    const path = c.pagePath.toLowerCase() === "/" + HOME_PAGE_NAME ? "/" : c.pagePath;
+    let site = siteById(cfg, c.url.searchParams.get("sf_site"));
+    if (!site) {
+      const ordered = [defaultSite(cfg), ...prefixedSites(cfg)];
+      for (const s of ordered) {
+        if (await urlExists(cfg.authoringOrigin + joinPath(s.prefix, path))) {
+          site = s;
+          break;
+        }
+      }
+      site ||= defaultSite(cfg);
+    }
+    return { site, ...liveUrls(site, path, cfg) };
+  }
+
   /**
-   * Returns { kind, site, authoringUrl, productionUrl, editUrl?, editType? } for the given page.
-   * editUrl/editType are only set for production pages; editType names the content type (e.g. "News") when
-   * the page is a content item's detail page, or is null for the page editor.
-   * `title` is only needed for preview URLs.
+   * Returns { kind, site, authoringUrl, productionUrl, editUrl?, editType?, problem? } for the given page.
+   * editUrl is only set for production pages; editType names the content type (e.g. "News") for content items,
+   * or is null for pages. `problem` is set for backend content items without a live URL.
+   * `title` is only needed for preview and content preview URLs.
    */
   async function resolve(href, title, cfg) {
     const c = classify(href, cfg);
+    if (c.kind === "contentPreview") return { kind: c.kind, ...(await resolveContentPreview(c, title, cfg)) };
+    if (c.kind === "backendContent") return { kind: c.kind, ...(await resolveBackendContent(c, cfg)) };
+    if (c.kind === "backendPage") return { kind: c.kind, ...(await resolveBackendPage(c, cfg)) };
     if (c.kind === "preview") {
       const site = await resolvePreviewSite(href, title, cfg);
       const path = stripPreview(c.url.pathname);

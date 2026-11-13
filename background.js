@@ -4,6 +4,7 @@ const LOGIN_CACHE_MS = 60 * 1000;
 const MENU = {
   production: "sfx-open-production",
   authoringFromPreview: "sfx-open-authoring-from-preview",
+  authoringFromBackend: "sfx-open-authoring-from-backend",
   authoringFromProduction: "sfx-open-authoring-from-production",
   editFromProduction: "sfx-edit-from-production"
 };
@@ -41,10 +42,13 @@ async function getTitle(tabId) {
   }
 }
 
+const TITLE_KINDS = ["preview", "contentPreview"];
+const BACKEND_KINDS = ["contentPreview", "backendContent", "backendPage"];
+
 async function resolveTab(tab) {
   const cfg = await SFX.getConfig();
   const kind = SFX.classify(tab.url, cfg).kind;
-  const title = kind === "preview" ? await getTitle(tab.id) : "";
+  const title = TITLE_KINDS.includes(kind) ? await getTitle(tab.id) : "";
   return SFX.resolve(tab.url, title, cfg);
 }
 
@@ -61,6 +65,8 @@ async function openAuthoring(tab) {
   const info = await resolveTab(tab);
   if (info.kind === "preview") {
     await chrome.tabs.update(tab.id, { url: info.authoringUrl });
+  } else if (BACKEND_KINDS.includes(info.kind)) {
+    if (info.authoringUrl) await openBeside(tab, info.authoringUrl);
   } else if (info.kind === "production") {
     if (await checkLogin()) await openBeside(tab, info.authoringUrl);
   }
@@ -90,6 +96,18 @@ async function buildMenus() {
     title: "Open authoring page (remove /Action/Preview)",
     contexts: ["page", "frame", "link", "selection", "image"],
     documentUrlPatterns: [`${origin}/*/Action/Preview*`, `${origin}/*/action/preview*`]
+  });
+  chrome.contextMenus.create({
+    id: MENU.authoringFromBackend,
+    title: "View on authoring site",
+    contexts: ["page", "frame", "link", "selection", "image"],
+    documentUrlPatterns: [
+      `${origin}/Sitefinity/adminapp/content/*`,
+      `${origin}/Sitefinity/adminapp/pages/*`,
+      `${origin}/sitefinity/adminapp/content/*`,
+      `${origin}/sitefinity/adminapp/pages/*`,
+      `${origin}/*sf-content-action=preview*`
+    ]
   });
   if (prodPatterns.length) {
     chrome.contextMenus.create({
@@ -136,7 +154,9 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   const target = { ...tab, url: info.pageUrl || tab.url };
   if (info.menuItemId === MENU.production) openProduction(target);
-  else if (info.menuItemId === MENU.authoringFromPreview || info.menuItemId === MENU.authoringFromProduction) {
+  else if (
+    [MENU.authoringFromPreview, MENU.authoringFromBackend, MENU.authoringFromProduction].includes(info.menuItemId)
+  ) {
     openAuthoring(target);
   } else if (info.menuItemId === MENU.editFromProduction) openEdit(target);
 });
