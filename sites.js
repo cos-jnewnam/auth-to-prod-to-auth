@@ -31,20 +31,33 @@
         productionHosts: ["www.choosescottsdale.com", "choosescottsdale.com"],
         titleSuffixes: ["Choose Scottsdale"]
       }
+    ],
+    // Content items shown on Production at .../details/<UrlName>. Looked up via the public /api/default/<entitySet> service.
+    // `sites` limits which site ids the type applies to (empty = all).
+    contentTypes: [
+      {
+        name: "News",
+        entitySet: "newsitems",
+        adminType: "newsitems",
+        provider: "OpenAccessDataProvider",
+        sites: ["main"]
+      }
     ]
   };
 
   const PREVIEW_RE = /\/Action\/Preview\/?$/i;
+  const DETAIL_RE = /^(.*?)\/details\/([^/]+)\/?$/i;
   const EDIT_CULTURE = "en";
   const HOME_PAGE_NAME = "home";
 
   async function getConfig() {
-    const stored = await chrome.storage.sync.get(["sites", "autoRedirect", "authoringOrigin"]);
+    const stored = await chrome.storage.sync.get(["sites", "autoRedirect", "authoringOrigin", "contentTypes"]);
     const storedSites = Array.isArray(stored.sites) && stored.sites.length ? stored.sites : null;
     return {
       authoringOrigin: stored.authoringOrigin || DEFAULT_CONFIG.authoringOrigin,
       autoRedirect: stored.autoRedirect ?? DEFAULT_CONFIG.autoRedirect,
-      sites: storedSites ? storedSites.map(withDefaultSiteId) : DEFAULT_CONFIG.sites
+      sites: storedSites ? storedSites.map(withDefaultSiteId) : DEFAULT_CONFIG.sites,
+      contentTypes: Array.isArray(stored.contentTypes) ? stored.contentTypes : DEFAULT_CONFIG.contentTypes
     };
   }
 
@@ -60,6 +73,46 @@
     const pagePath = pathname.replace(/^\/+|\/+$/g, "") || HOME_PAGE_NAME;
     const query = site.siteId ? `?sf_site=${encodeURIComponent(site.siteId)}` : "";
     return `${cfg.authoringOrigin}/Sitefinity/adminapp/pages/${pagePath}/Action/Edit/${EDIT_CULTURE}${query}`;
+  }
+
+  function safeDecode(s) {
+    try {
+      return decodeURIComponent(s);
+    } catch {
+      return s;
+    }
+  }
+
+  // Finds the id of a content item (e.g. a news article) by its UrlName using the site's public API.
+  async function findContentItem(origin, slug, site, cfg) {
+    const types = (cfg.contentTypes || []).filter((t) => !t.sites?.length || t.sites.includes(site.id));
+    const filter = `UrlName eq '${safeDecode(slug).replace(/'/g, "''")}'`;
+    for (const type of types) {
+      const api = `${origin}/api/default/${type.entitySet}?$filter=${encodeURIComponent(filter)}&$select=Id&$top=1`;
+      try {
+        const res = await fetch(api, { cache: "no-store" });
+        if (!res.ok) continue;
+        const id = (await res.json())?.value?.[0]?.Id;
+        if (id) return { type, id };
+      } catch {
+        // Try the next content type.
+      }
+    }
+    return null;
+  }
+
+  function contentEditUrlFor(item, cfg) {
+    const query = new URLSearchParams({ sf_provider: item.type.provider || "OpenAccessDataProvider", sf_culture: EDIT_CULTURE });
+    return `${cfg.authoringOrigin}/Sitefinity/adminapp/content/${item.type.adminType || item.type.entitySet}/${item.id}/edit?${query}`;
+  }
+
+  // Detail pages (.../details/<slug>) edit the content item; otherwise (or if not found) edit the hosting page.
+  async function resolveEdit(url, site, cfg) {
+    const detail = url.pathname.match(DETAIL_RE);
+    if (!detail) return { editUrl: editUrlFor(url.pathname, site, cfg), editType: null };
+    const item = await findContentItem(url.origin, detail[2], site, cfg);
+    if (item) return { editUrl: contentEditUrlFor(item, cfg), editType: item.type.name };
+    return { editUrl: editUrlFor(detail[1] || "/", site, cfg), editType: null };
   }
 
   function defaultSite(cfg) {
@@ -162,7 +215,9 @@
   }
 
   /**
-   * Returns { kind, site, authoringUrl, productionUrl, editUrl? } for the given page (editUrl only for production pages).
+   * Returns { kind, site, authoringUrl, productionUrl, editUrl?, editType? } for the given page.
+   * editUrl/editType are only set for production pages; editType names the content type (e.g. "News") when
+   * the page is a content item's detail page, or is null for the page editor.
    * `title` is only needed for preview URLs.
    */
   async function resolve(href, title, cfg) {
@@ -191,7 +246,7 @@
         kind: c.kind,
         site: c.site,
         authoringUrl: cfg.authoringOrigin + joinPath(c.site.prefix, c.url.pathname) + c.url.search + c.url.hash,
-        editUrl: editUrlFor(c.url.pathname, c.site, cfg),
+        ...(await resolveEdit(c.url, c.site, cfg)),
         productionUrl: c.url.href
       };
     }

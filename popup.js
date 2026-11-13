@@ -62,7 +62,8 @@ async function init() {
   if (info.kind === "production") {
     const loggedIn = await chrome.runtime.sendMessage({ type: "checkLogin", force: true });
     if (loggedIn) {
-      button("Edit in Sitefinity", info.editUrl, () => openBeside(tab, info.editUrl));
+      const editLabel = info.editType ? `Edit ${info.editType} item in Sitefinity` : "Edit page in Sitefinity";
+      button(editLabel, info.editUrl, () => openBeside(tab, info.editUrl));
       button("View in Sitefinity authoring", info.authoringUrl, () => openBeside(tab, info.authoringUrl));
     } else {
       note(`Log in to <a href="${cfg.authoringOrigin}/Sitefinity" target="_blank">Sitefinity</a> to edit this page or jump to the authoring page.`);
