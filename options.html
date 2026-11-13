@@ -27,6 +27,7 @@
     Production pages ending in <code>/details/&lt;slug&gt;</code> are looked up through the site's public
     <code>/api/default/&lt;entitySet&gt;</code> service by <code>UrlName</code>. If a match is found, <strong>Edit</strong> opens
     <code>/Sitefinity/adminapp/content/&lt;adminType&gt;/&lt;id&gt;/edit?sf_provider=&lt;provider&gt;</code>; otherwise it edits the hosting page.
+    The provider comes from the item itself; the <code>provider</code> setting is only a fallback.
     <code>sites</code> lists the site <code>id</code>s each type applies to (empty = all).
   </p>
   <textarea id="contentTypes" class="short" spellcheck="false"></textarea>

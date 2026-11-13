@@ -33,6 +33,7 @@
       }
     ],
     // Content items shown on Production at .../details/<UrlName>. Looked up via the public /api/default/<entitySet> service.
+    // The item's Provider from the API is used for the editor link; `provider` is only a fallback.
     // `sites` limits which site ids the type applies to (empty = all).
     contentTypes: [
       {
@@ -40,7 +41,7 @@
         entitySet: "newsitems",
         adminType: "newsitems",
         provider: "OpenAccessDataProvider",
-        sites: ["main"]
+        sites: ["main", "library"]
       }
     ]
   };
@@ -83,26 +84,30 @@
     }
   }
 
-  // Finds the id of a content item (e.g. a news article) by its UrlName using the site's public API.
+  // Finds the id (and provider) of a content item (e.g. a news article) by its UrlName using the site's public API.
   async function findContentItem(origin, slug, site, cfg) {
     const types = (cfg.contentTypes || []).filter((t) => !t.sites?.length || t.sites.includes(site.id));
     const filter = `UrlName eq '${safeDecode(slug).replace(/'/g, "''")}'`;
     for (const type of types) {
-      const api = `${origin}/api/default/${type.entitySet}?$filter=${encodeURIComponent(filter)}&$select=Id&$top=1`;
-      try {
-        const res = await fetch(api, { cache: "no-store" });
-        if (!res.ok) continue;
-        const id = (await res.json())?.value?.[0]?.Id;
-        if (id) return { type, id };
-      } catch {
-        // Try the next content type.
+      // Prefer the item's own Provider (it differs per site); fall back to Id-only if a type doesn't expose it.
+      for (const select of ["Id,Provider", "Id"]) {
+        const api = `${origin}/api/default/${type.entitySet}?$filter=${encodeURIComponent(filter)}&$select=${select}&$top=1`;
+        try {
+          const res = await fetch(api, { cache: "no-store" });
+          if (!res.ok) continue;
+          const item = (await res.json())?.value?.[0];
+          if (item?.Id) return { type, id: item.Id, provider: item.Provider || type.provider };
+          break;
+        } catch {
+          // Try the next query/content type.
+        }
       }
     }
     return null;
   }
 
   function contentEditUrlFor(item, cfg) {
-    const query = new URLSearchParams({ sf_provider: item.type.provider || "OpenAccessDataProvider", sf_culture: EDIT_CULTURE });
+    const query = new URLSearchParams({ sf_provider: item.provider || "OpenAccessDataProvider", sf_culture: EDIT_CULTURE });
     return `${cfg.authoringOrigin}/Sitefinity/adminapp/content/${item.type.adminType || item.type.entitySet}/${item.id}/edit?${query}`;
   }
 
