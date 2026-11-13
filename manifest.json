@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Sitefinity Preview Helper",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "description": "Fixes Sitefinity /Action/Preview URLs (multisite aware) and jumps between authoring, Production, and the page editor.",
   "permissions": ["storage", "contextMenus", "scripting", "activeTab", "tabs"],
   "host_permissions": [
@@ -21,6 +21,19 @@
       "matches": ["https://scottsdaleaz-aut.sitefinity.cloud/*"],
       "js": ["sites.js", "content.js"],
       "run_at": "document_end"
+    },
+    {
+      "matches": [
+        "https://scottsdaleaz-aut.sitefinity.cloud/*",
+        "https://www.scottsdaleaz.gov/*",
+        "https://scottsdaleaz.gov/*",
+        "https://www.scottsdalelibrary.org/*",
+        "https://scottsdalelibrary.org/*",
+        "https://www.choosescottsdale.com/*",
+        "https://choosescottsdale.com/*"
+      ],
+      "js": ["overlay.js"],
+      "run_at": "document_idle"
     }
   ],
   "action": {

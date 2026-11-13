@@ -30,6 +30,7 @@ After changing any file, click the extension's **Reload** button on the extensio
 | Edit a public notice | Same as news, for ScottsdaleAZ pages at `/public-notices/<slug>`: opens `/Sitefinity/adminapp/content/publicnotices/<id>/edit?sf_provider=OpenAccessProvider&sf_culture=en`. |
 | Backend → authoring / Production | In the Sitefinity content editor (`/Sitefinity/adminapp/content/<type>/<id>/edit`) or page editor (`/Sitefinity/adminapp/pages/<path>/Action/Edit/en`): **View on authoring site** (popup, right-click menu, `Alt+Shift+A`) and **View in Production** (`Alt+Shift+P`). Content items are looked up by ID through the live site's API and shown at the type's `detailPaths` (e.g. `/scottsdale-news/details/<slug>`). Unpublished items have no live URL. Use Sitefinity's own **Preview** button for drafts (its link has a signed `sf-auth` token the extension can't create). |
 | Content preview → authoring / Production | On a content preview (`…?sf-content-action=preview&sf-auth=…`): **Open authoring page** and **View in Production**, with the preview query string (including the `sf-auth` token) removed. Not automatic, so the draft preview stays usable. |
+| On-page panel | Turn on **Show panel on pages** (popup or Settings) to show the same buttons in a panel in the top-right corner of authoring, backend, and Production pages. **–** minimizes it to a small **S** badge (remembered across tabs), and **×** hides it on the current page. Off by default. |
 
 ## Site mapping
 

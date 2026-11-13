@@ -45,11 +45,31 @@ async function getTitle(tabId) {
 const TITLE_KINDS = ["preview", "contentPreview"];
 const BACKEND_KINDS = ["contentPreview", "backendContent", "backendPage"];
 
-async function resolveTab(tab) {
+async function resolveTab(tab, title) {
   const cfg = await SFX.getConfig();
   const kind = SFX.classify(tab.url, cfg).kind;
-  const title = TITLE_KINDS.includes(kind) ? await getTitle(tab.id) : "";
+  if (title === undefined) title = TITLE_KINDS.includes(kind) ? await getTitle(tab.id) : "";
   return SFX.resolve(tab.url, title, cfg);
+}
+
+// Info for the on-page panel. Production lookups only run when an admin session exists.
+async function pageInfo(tab, title) {
+  const cfg = await SFX.getConfig();
+  const c = SFX.classify(tab.url, cfg);
+  let info;
+  let loggedIn = false;
+  if (c.kind === "production") {
+    loggedIn = await checkLogin();
+    info = loggedIn ? await resolveTab(tab, title) : { kind: c.kind, site: c.site };
+  } else if (c.kind === "other" || c.kind === "backend") {
+    info = { kind: c.kind };
+  } else {
+    info = await resolveTab(tab, title);
+  }
+  return {
+    status: (SFX.KIND_LABELS[info.kind] || SFX.KIND_LABELS.other) + (info.site ? ` · ${info.site.name}` : ""),
+    ...SFX.actionsFor(info, loggedIn, cfg)
+  };
 }
 
 function openBeside(tab, url) {
@@ -183,7 +203,21 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
   else if (command === "open-edit") openEdit(tab);
 });
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg?.type === "pageInfo" && sender.tab) {
+    pageInfo({ ...sender.tab, url: msg.url || sender.tab.url }, msg.title ?? "").then(sendResponse);
+    return true;
+  }
+  if (msg?.type === "openBeside" && sender.tab && /^https?:\/\//i.test(msg.url || "")) {
+    openBeside(sender.tab, msg.url);
+    sendResponse(true);
+    return false;
+  }
+  if (msg?.type === "openOptions") {
+    chrome.runtime.openOptionsPage();
+    sendResponse(true);
+    return false;
+  }
   if (msg?.type === "checkLogin") {
     checkLogin(!!msg.force).then(sendResponse);
     return true;

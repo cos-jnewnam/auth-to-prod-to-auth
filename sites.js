@@ -3,6 +3,7 @@
   const DEFAULT_CONFIG = {
     authoringOrigin: "https://scottsdaleaz-aut.sitefinity.cloud",
     autoRedirect: true,
+    showOverlay: false,
     sites: [
       {
         id: "main",
@@ -74,11 +75,12 @@
   const HOME_PAGE_NAME = "home";
 
   async function getConfig() {
-    const stored = await chrome.storage.sync.get(["sites", "autoRedirect", "authoringOrigin", "contentTypes"]);
+    const stored = await chrome.storage.sync.get(["sites", "autoRedirect", "showOverlay", "authoringOrigin", "contentTypes"]);
     const storedSites = Array.isArray(stored.sites) && stored.sites.length ? stored.sites : null;
     return {
       authoringOrigin: stored.authoringOrigin || DEFAULT_CONFIG.authoringOrigin,
       autoRedirect: stored.autoRedirect ?? DEFAULT_CONFIG.autoRedirect,
+      showOverlay: stored.showOverlay ?? DEFAULT_CONFIG.showOverlay,
       sites: storedSites ? storedSites.map(withDefaultSiteId) : DEFAULT_CONFIG.sites,
       contentTypes: Array.isArray(stored.contentTypes) ? stored.contentTypes.map(withDefaultDetailPaths) : DEFAULT_CONFIG.contentTypes
     };
@@ -379,5 +381,62 @@
     return { kind: c.kind };
   }
 
-  root.SFX = { DEFAULT_CONFIG, getConfig, classify, siteFromTitle, resolve, stripPreview };
+  const KIND_LABELS = {
+    preview: "Preview page",
+    contentPreview: "Content preview",
+    authoring: "Authoring page",
+    production: "Production page",
+    backendContent: "Sitefinity content editor",
+    backendPage: "Sitefinity page editor",
+    backend: "Sitefinity backend",
+    other: "Not a Scottsdale Sitefinity page"
+  };
+
+  const BACKEND_KINDS = ["contentPreview", "backendContent", "backendPage"];
+
+  /**
+   * The buttons and notes shown for a resolved page (shared by the popup and the on-page panel).
+   * Buttons: { label, url, mode: "same" | "beside" }. Notes: { text, link?: { label, url } } where url "options"
+   * means the extension's Settings page.
+   */
+  function actionsFor(info, loggedIn, cfg) {
+    const buttons = [];
+    const notes = [];
+    if (info.kind === "preview") {
+      buttons.push({ label: "Open authoring page", url: info.authoringUrl, mode: "same" });
+    }
+    if (BACKEND_KINDS.includes(info.kind) && info.authoringUrl) {
+      const label = info.kind === "contentPreview" ? "Open authoring page" : "View on authoring site";
+      buttons.push({ label, url: info.authoringUrl, mode: "beside" });
+    }
+    if (info.productionUrl && (info.kind === "preview" || info.kind === "authoring" || BACKEND_KINDS.includes(info.kind))) {
+      buttons.push({ label: "View in Production", url: info.productionUrl, mode: "beside" });
+    }
+    if (info.kind === "backendContent" && info.problem) {
+      const type = info.editType || "content";
+      const settings = { label: "Open Settings", url: "options" };
+      if (info.problem === "notFound") {
+        notes.push({ text: `This ${type} item wasn't found on the live site. It may not be published yet; use Sitefinity's Preview button to see the draft.` });
+      } else if (info.problem === "noDetailPath") {
+        notes.push({ text: `No detail page is configured for ${type} on ${info.site?.name || "this site"} (detailPaths).`, link: settings });
+      } else {
+        notes.push({ text: "This content type isn't set up yet (Content types).", link: settings });
+      }
+    }
+    if (info.kind === "production") {
+      if (loggedIn) {
+        const editLabel = info.editType ? `Edit ${info.editType} item in Sitefinity` : "Edit page in Sitefinity";
+        buttons.push({ label: editLabel, url: info.editUrl, mode: "beside" });
+        buttons.push({ label: "View in Sitefinity authoring", url: info.authoringUrl, mode: "beside" });
+      } else {
+        notes.push({
+          text: "Log in to Sitefinity to edit this page or jump to the authoring page.",
+          link: { label: "Log in", url: cfg.authoringOrigin + "/Sitefinity" }
+        });
+      }
+    }
+    return { buttons, notes };
+  }
+
+  root.SFX = { DEFAULT_CONFIG, KIND_LABELS, getConfig, classify, siteFromTitle, resolve, actionsFor, stripPreview };
 })(globalThis);

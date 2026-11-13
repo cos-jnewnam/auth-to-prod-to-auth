@@ -41,11 +41,13 @@ function validateContentTypes(types) {
 async function load() {
   const cfg = await SFX.getConfig();
   $("autoRedirect").checked = cfg.autoRedirect;
+  $("showOverlay").checked = cfg.showOverlay;
   $("sites").value = JSON.stringify(cfg.sites, null, 2);
   $("contentTypes").value = JSON.stringify(cfg.contentTypes, null, 2);
 }
 
 $("autoRedirect").addEventListener("change", (e) => chrome.storage.sync.set({ autoRedirect: e.target.checked }));
+$("showOverlay").addEventListener("change", (e) => chrome.storage.sync.set({ showOverlay: e.target.checked }));
 
 $("save").addEventListener("click", async () => {
   try {
